@@ -32,13 +32,16 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express = __importStar(require("express"));
-const cors = __importStar(require("cors"));
+const cors_1 = __importDefault(require("cors"));
 const functions = __importStar(require("firebase-functions"));
 const config_1 = require("../config");
 const router = express.Router();
-router.use(cors({ origin: true }));
+router.use((0, cors_1.default)({ origin: true }));
 // GET /events/next
 router.get('/next', async (req, res) => {
     try {

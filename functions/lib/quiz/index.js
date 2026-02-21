@@ -32,14 +32,17 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const express = __importStar(require("express"));
-const cors = __importStar(require("cors"));
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
 const functions = __importStar(require("firebase-functions"));
 const config_1 = require("../config");
 const generative_ai_1 = require("@google/generative-ai");
-const router = express.Router();
-router.use(cors({ origin: true }));
+const router = express_1.default.Router();
+router.use((0, cors_1.default)({ origin: true }));
 const getGemini = () => {
     var _a;
     const apiKey = process.env.GEMINI_API_KEY || ((_a = functions.config().gemini) === null || _a === void 0 ? void 0 : _a.api_key);

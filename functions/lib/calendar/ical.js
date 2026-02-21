@@ -37,13 +37,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const functions = __importStar(require("firebase-functions"));
-const express = __importStar(require("express"));
-const cors = __importStar(require("cors"));
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
 const config_1 = require("../config");
 const node_fetch_1 = __importDefault(require("node-fetch"));
-const ical_js_1 = __importDefault(require("ical.js"));
-const router = express.Router();
-router.use(cors({ origin: true }));
+const ICAL = require("ical.js");
+const router = express_1.default.Router();
+router.use((0, cors_1.default)({ origin: true }));
 // POST /calendar/connect/ical
 router.post('/connect/ical', async (req, res) => {
     var _a, _b, _c;
@@ -60,15 +60,15 @@ router.post('/connect/ical', async (req, res) => {
             throw new Error(`Failed to fetch iCal: ${response.status}`);
         const text = await response.text();
         // Parse with ical.js
-        const jcal = ical_js_1.default.parse(text);
-        const comp = new ical_js_1.default.Component(jcal);
+        const jcal = ICAL.parse(text);
+        const comp = new ICAL.Component(jcal);
         const vevents = comp.getAllSubcomponents('vevent');
         const now = new Date();
         const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days ahead
         const batch = config_1.db.batch();
         let count = 0;
         for (const vevent of vevents) {
-            const event = new ical_js_1.default.Event(vevent);
+            const event = new ICAL.Event(vevent);
             const dtstart = (_a = event.startDate) === null || _a === void 0 ? void 0 : _a.toJSDate();
             if (!dtstart || dtstart < now || dtstart > cutoff)
                 continue;

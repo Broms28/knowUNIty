@@ -38,8 +38,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationScheduler = exports.api = void 0;
 const functions = __importStar(require("firebase-functions"));
-const express = __importStar(require("express"));
-const cors = __importStar(require("cors"));
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
 const admin = __importStar(require("firebase-admin"));
 require("./config"); // Initialize firebase-admin
 const ical_1 = __importDefault(require("./calendar/ical"));
@@ -48,37 +48,37 @@ const index_2 = __importDefault(require("./doubt/index"));
 const index_3 = __importDefault(require("./events/index"));
 const scheduler_1 = require("./notifications/scheduler");
 Object.defineProperty(exports, "notificationScheduler", { enumerable: true, get: function () { return scheduler_1.notificationScheduler; } });
-const app = express();
-app.use(cors({ origin: true }));
-app.use(express.json());
+const app = (0, express_1.default)();
+app.use((0, cors_1.default)({ origin: true }));
+app.use(express_1.default.json());
 // ─── Auth middleware ─────────────────────────────────────────────────────────
 app.use(async (req, res, next) => {
     // Skip health check
-    if (req.path === '/health')
+    if (req.path === "/health")
         return next();
     const authHeader = req.headers.authorization;
-    if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer '))) {
-        res.status(401).json({ error: 'Unauthorized' });
+    if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith("Bearer "))) {
+        res.status(401).json({ error: "Unauthorized" });
         return;
     }
     try {
-        const token = authHeader.split('Bearer ')[1];
+        const token = authHeader.split("Bearer ")[1];
         const decoded = await admin.auth().verifyIdToken(token);
         req.uid = decoded.uid;
         next();
     }
     catch (err) {
-        res.status(401).json({ error: 'Invalid token' });
+        res.status(401).json({ error: "Invalid token" });
     }
 });
 // ─── Routes ──────────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ status: 'ok', version: '1.0.0' }));
-app.use('/calendar', ical_1.default);
-app.use('/quiz', index_1.default);
-app.use('/doubt', index_2.default);
-app.use('/events', index_3.default);
+app.get("/health", (_, res) => res.json({ status: "ok", version: "1.0.0" }));
+app.use("/calendar", ical_1.default);
+app.use("/quiz", index_1.default);
+app.use("/doubt", index_2.default);
+app.use("/events", index_3.default);
 // ─── Exports ─────────────────────────────────────────────────────────────────
 exports.api = functions
-    .runWith({ memory: '512MB', timeoutSeconds: 60 })
+    .runWith({ memory: "512MB", timeoutSeconds: 60 })
     .https.onRequest(app);
 //# sourceMappingURL=index.js.map
