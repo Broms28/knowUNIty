@@ -15,6 +15,7 @@ app/dist/
 # Functions
 functions/node_modules/
 functions/lib/
+functions/.env
 
 # OS
 .DS_Store
