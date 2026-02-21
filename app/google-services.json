@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "701795038648",
+    "project_id": "knowunity-45031",
+    "storage_bucket": "knowunity-45031.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:701795038648:android:ce93904ccdf9e5fa24cb4d",
+        "android_client_info": {
+          "package_name": "com.knowunity.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoO1gbIhgAkEzKC3QGOrK_xkR4CfxwLlk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

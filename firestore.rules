@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the request authenticated?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: is the document owned by the requesting user?
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Users: can only read/write own document
+    match /users/{userId} {
+      allow read, write: if isAuth() && isOwner(userId);
+    }
+
+    // Events: can only read/write own events
+    match /events/{docId} {
+      allow read: if isAuth() && isOwner(resource.data.userId);
+      allow write: if false; // Only backend writes
+    }
+
+    // Quizzes: can read own quizzes
+    match /quizzes/{quizId} {
+      allow read: if isAuth() && isOwner(resource.data.userId);
+      allow write: if false; // Only backend writes
+    }
+
+    // Quiz attempts: can read own attempts
+    match /quizAttempts/{attemptId} {
+      allow read: if isAuth() && isOwner(resource.data.userId);
+      allow write: if false; // Only backend writes
+    }
+
+    // Doubts: can read own doubts
+    match /doubts/{doubtId} {
+      allow read: if isAuth() && isOwner(resource.data.userId);
+      allow write: if false; // Only backend writes
+    }
+  }
+}

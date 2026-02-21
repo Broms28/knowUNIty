@@ -1,0 +1,21 @@
+# Environment variables - NEVER commit these
+app/.env
+functions/.env
+functions/.secret.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Expo
+app/.expo/
+app/node_modules/
+app/dist/
+
+# Functions
+functions/node_modules/
+functions/lib/
+
+# OS
+.DS_Store
+Thumbs.db
