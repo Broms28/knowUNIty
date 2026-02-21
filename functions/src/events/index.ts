@@ -1,5 +1,5 @@
 import * as express from 'express';
-import * as cors from 'cors';
+import cors from 'cors';
 import * as functions from 'firebase-functions';
 import { db } from '../config';
 
