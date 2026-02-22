@@ -8,6 +8,7 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import SignInScreen from '../screens/SignInScreen';
 import CalendarConnectScreen from '../screens/CalendarConnectScreen';
 import HomeScreen from '../screens/HomeScreen';
+import AccountScreen from '../screens/AccountScreen';
 import WarmUpScreen from '../screens/WarmUpScreen';
 import QuizScreen from '../screens/QuizScreen';
 import ResultsScreen from '../screens/ResultsScreen';
@@ -42,6 +43,7 @@ export default function RootNavigator() {
                 <Stack.Screen name="SignIn" component={SignInScreen} />
                 <Stack.Screen name="CalendarConnect" component={CalendarConnectScreen} />
                 <Stack.Screen name="Home" component={HomeScreen} />
+                <Stack.Screen name="Account" component={AccountScreen} />
                 <Stack.Screen name="WarmUp" component={WarmUpScreen} />
                 <Stack.Screen name="Quiz" component={QuizScreen} />
                 <Stack.Screen name="Results" component={ResultsScreen} />

@@ -65,9 +65,10 @@ export interface Doubt {
 
 export type RootStackParamList = {
     Welcome: undefined;
-    SignIn: undefined;
+    SignIn: { initialMode?: 'signin' | 'signup' } | undefined;
     CalendarConnect: undefined;
     Home: undefined;
+    Account: { suggestedName?: string } | undefined;
     WarmUp: { eventId?: string; eventTitle?: string };
     Quiz: { topic: string; mode: 'quick' | 'extended'; eventId?: string };
     Results: { quizId: string; score: number; total: number };

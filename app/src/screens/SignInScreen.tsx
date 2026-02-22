@@ -4,14 +4,19 @@ import {
     KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
 import { signInWithEmail, signUpWithEmail } from '../services/auth';
 
-type Props = { navigation: StackNavigationProp<RootStackParamList, 'SignIn'> };
+type Props = {
+    navigation: StackNavigationProp<RootStackParamList, 'SignIn'>;
+    route: RouteProp<RootStackParamList, 'SignIn'>;
+};
 
-export default function SignInScreen({ navigation }: Props) {
-    const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+export default function SignInScreen({ navigation, route }: Props) {
+    const initialMode = route.params?.initialMode === 'signup' ? 'signup' : 'signin';
+    const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -27,7 +32,11 @@ export default function SignInScreen({ navigation }: Props) {
             } else {
                 await signUpWithEmail(email.trim(), password, name.trim());
             }
-            navigation.reset({ index: 0, routes: [{ name: 'CalendarConnect' }] });
+
+            navigation.reset({
+                index: 0,
+                routes: [{ name: mode === 'signup' ? 'CalendarConnect' : 'Home' }],
+            });
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Something went wrong');
         } finally {

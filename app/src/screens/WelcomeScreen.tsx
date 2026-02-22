@@ -78,7 +78,7 @@ export default function WelcomeScreen({ navigation }: Props) {
                 <View style={styles.actions}>
                     <TouchableOpacity
                         style={styles.primaryButton}
-                        onPress={() => navigation.navigate('SignIn')}
+                        onPress={() => navigation.navigate('SignIn', { initialMode: 'signup' })}
                         activeOpacity={0.85}
                     >
                         <Text style={styles.primaryButtonText}>Get Started</Text>
@@ -86,7 +86,7 @@ export default function WelcomeScreen({ navigation }: Props) {
 
                     <TouchableOpacity
                         style={styles.secondaryButton}
-                        onPress={() => navigation.navigate('SignIn')}
+                        onPress={() => navigation.navigate('SignIn', { initialMode: 'signin' })}
                         activeOpacity={0.85}
                     >
                         <Text style={styles.secondaryButtonText}>I already have an account</Text>

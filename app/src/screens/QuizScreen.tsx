@@ -14,6 +14,24 @@ type Props = {
     route: RouteProp<RootStackParamList, 'Quiz'>;
 };
 
+function normalizeQuestion(input: any): QuizQuestion | null {
+    const question = String(input?.question || '').trim();
+    const options = Array.isArray(input?.options)
+        ? input.options.map((o: any) => String(o || '').trim()).filter(Boolean).slice(0, 4)
+        : [];
+
+    if (!question || options.length < 2) return null;
+
+    let correctIndex = Number(input?.correctIndex);
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+        correctIndex = 0;
+    }
+
+    const explanation = String(input?.explanation || '').trim() || 'No explanation provided.';
+
+    return { question, options, correctIndex, explanation };
+}
+
 export default function QuizScreen({ navigation, route }: Props) {
     const { topic, mode, eventId } = route.params;
     const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -29,10 +47,20 @@ export default function QuizScreen({ navigation, route }: Props) {
         (async () => {
             try {
                 const data = await generateQuiz(topic, mode, eventId);
-                setQuestions(data.quiz.questions);
-                setQuizId(data.quiz.id);
+                const rawQuestions = Array.isArray(data?.quiz?.questions) ? data.quiz.questions : [];
+                const safeQuestions = rawQuestions
+                    .map(normalizeQuestion)
+                    .filter((q: QuizQuestion | null): q is QuizQuestion => q !== null);
+
+                if (safeQuestions.length === 0) {
+                    throw new Error('Quiz generated with no valid questions. Please try again.');
+                }
+
+                setQuestions(safeQuestions);
+                setQuizId(typeof data?.quiz?.id === 'string' ? data.quiz.id : null);
             } catch (e: any) {
-                Alert.alert('Error', e.message || 'Failed to generate quiz', [
+                const backendError = e?.response?.data?.error;
+                Alert.alert('Error', backendError || e.message || 'Failed to generate quiz', [
                     { text: 'Go back', onPress: () => navigation.goBack() },
                 ]);
             } finally {
@@ -48,6 +76,9 @@ export default function QuizScreen({ navigation, route }: Props) {
     };
 
     const handleNext = async () => {
+        const currentQuestion = questions[currentIndex];
+        if (!currentQuestion) return;
+
         const newAnswers = [...answers, selectedAnswer ?? -1];
         setAnswers(newAnswers);
 
@@ -56,10 +87,14 @@ export default function QuizScreen({ navigation, route }: Props) {
             if (currentIndex + 1 >= questions.length) {
                 // Submit quiz
                 try {
-                    await submitQuiz(quizId!, newAnswers);
+                    if (quizId) {
+                        await submitQuiz(quizId, newAnswers);
+                    }
                 } catch (e) { /* best effort */ }
-                const score = newAnswers.filter((a, i) => a === questions[i].correctIndex).length;
-                navigation.replace('Results', { quizId: quizId!, score, total: questions.length });
+                const score = newAnswers.reduce((acc, answer, i) => {
+                    return acc + (questions[i] && answer === questions[i].correctIndex ? 1 : 0);
+                }, 0);
+                navigation.replace('Results', { quizId: quizId || 'quiz-local', score, total: questions.length });
             } else {
                 setCurrentIndex(currentIndex + 1);
                 setSelectedAnswer(null);
@@ -80,7 +115,19 @@ export default function QuizScreen({ navigation, route }: Props) {
     }
 
     const q = questions[currentIndex];
-    const progress = (currentIndex + 1) / questions.length;
+    if (!q) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Quiz data is not available.</Text>
+                <Text style={styles.loadingSubtext}>Please go back and generate again.</Text>
+                <TouchableOpacity style={styles.nextBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+                    <Text style={styles.nextBtnText}>Go back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    const progress = questions.length > 0 ? (currentIndex + 1) / questions.length : 0;
 
     return (
         <View style={styles.container}>
@@ -132,7 +179,7 @@ export default function QuizScreen({ navigation, route }: Props) {
                                     disabled={revealed}
                                 >
                                     <View style={styles.optionLetter}>
-                                        <Text style={styles.optionLetterText}>{['A', 'B', 'C', 'D'][i]}</Text>
+                                        <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
                                     </View>
                                     <Text style={textStyle} numberOfLines={3}>{option}</Text>
                                     {revealed && i === q.correctIndex && <Text style={styles.checkmark}>✓</Text>}
@@ -158,12 +205,16 @@ export default function QuizScreen({ navigation, route }: Props) {
                     <View style={styles.actionRow}>
                         <TouchableOpacity
                             style={styles.doubtBtn}
-                            onPress={() => navigation.navigate('Doubts', {
-                                quizId: quizId!,
-                                questionIndex: currentIndex,
-                                question: q.question,
-                            })}
+                            onPress={() => {
+                                if (!quizId) return;
+                                navigation.navigate('Doubts', {
+                                    quizId,
+                                    questionIndex: currentIndex,
+                                    question: q.question,
+                                });
+                            }}
                             activeOpacity={0.85}
+                            disabled={!quizId}
                         >
                             <Text style={styles.doubtBtnText}>💬 Ask a question</Text>
                         </TouchableOpacity>

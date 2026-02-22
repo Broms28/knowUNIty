@@ -1,16 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView,
-    RefreshControl, ActivityIndicator, Alert,
+    RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, CalendarEvent } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
 import { getNextEvent } from '../services/api';
-import { signOut } from '../services/auth';
+import { getUserProfile } from '../services/auth';
 import { registerForPushNotifications } from '../services/notifications';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
+import { doc, setDoc } from '@firebase/firestore';
 
 type Props = { navigation: StackNavigationProp<RootStackParamList, 'Home'> };
 
@@ -33,10 +34,24 @@ function minutesUntil(iso: string) {
     return Math.round((new Date(iso).getTime() - Date.now()) / 60000);
 }
 
+function sanitizeDisplayName(value?: string | null, email?: string | null) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return '';
+    const looksLikeEmail = /\S+@\S+\.\S+/.test(trimmed);
+    if (looksLikeEmail) return '';
+    if (['user', 'unknown', 'n/a'].includes(trimmed.toLowerCase())) return '';
+    if (email && trimmed.toLowerCase() === email.toLowerCase()) return '';
+    return trimmed;
+}
+
 export default function HomeScreen({ navigation }: Props) {
     const [nextEvent, setNextEvent] = useState<CalendarEvent | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [updatingEvents, setUpdatingEvents] = useState(false);
+    const [calendarLinked, setCalendarLinked] = useState<boolean>(false);
+    const [calendarSource, setCalendarSource] = useState<string | null>(null);
+    const [profileName, setProfileName] = useState<string>('');
     const user = auth.currentUser;
 
     const fetchNextEvent = async () => {
@@ -48,38 +63,135 @@ export default function HomeScreen({ navigation }: Props) {
             setNextEvent(null);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchCalendarStatus = async () => {
+        try {
+            const uid = auth.currentUser?.uid;
+            if (!uid) {
+                setCalendarLinked(false);
+                setCalendarSource(null);
+                setProfileName('');
+                return;
+            }
+            const profile = await getUserProfile(uid) as any;
+            const nameFromProfile = String(
+                profile?.name || profile?.fullName || profile?.username || ''
+            ).trim();
+            setProfileName(nameFromProfile);
+            const resolvedName = sanitizeDisplayName(nameFromProfile, auth.currentUser?.email) ||
+                sanitizeDisplayName(auth.currentUser?.displayName, auth.currentUser?.email);
+            const profileStoredName = sanitizeDisplayName(
+                profile?.name || profile?.fullName || profile?.username,
+                auth.currentUser?.email
+            );
+            if (resolvedName && !profileStoredName) {
+                await setDoc(doc(db, 'users', uid), {
+                    name: resolvedName,
+                    fullName: resolvedName,
+                }, { merge: true });
+                setProfileName(resolvedName);
+            }
+            const icalUrl = profile?.calendarConfig?.icalUrl || profile?.['calendarConfig.icalUrl'];
+            const linked = profile?.calendarType === 'google' ||
+                (profile?.calendarType === 'ical' && !!icalUrl);
+            setCalendarLinked(!!linked);
+
+            if (profile?.calendarType === 'ical' && icalUrl) {
+                try {
+                    setCalendarSource(new URL(icalUrl).host);
+                } catch {
+                    setCalendarSource(null);
+                }
+            } else if (profile?.calendarType === 'google') {
+                setCalendarSource('Google Calendar');
+            } else {
+                setCalendarSource(null);
+            }
+        } catch {
+            setCalendarLinked(false);
+            setCalendarSource(null);
+            setProfileName('');
+        }
+    };
+
+    const refreshData = async (manual = false) => {
+        if (manual) setUpdatingEvents(true);
+        try {
+            await Promise.all([fetchNextEvent(), fetchCalendarStatus()]);
+        } finally {
             setRefreshing(false);
+            if (manual) setUpdatingEvents(false);
         }
     };
 
     useFocusEffect(
         useCallback(() => {
-            fetchNextEvent();
+            refreshData();
             registerForPushNotifications().catch(console.warn);
         }, [])
     );
 
-    const handleSignOut = async () => {
-        await signOut();
-        navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
-    };
-
     const mins = nextEvent ? minutesUntil(nextEvent.startTime) : null;
+    const displayName = sanitizeDisplayName(profileName, user?.email) ||
+        sanitizeDisplayName(user?.displayName, user?.email) ||
+        'there';
+    const avatarInitial = displayName[0]?.toUpperCase() || 'U';
 
     return (
         <ScrollView
             style={styles.container}
             contentContainerStyle={styles.content}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNextEvent(); }} tintColor={colors.primary} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); refreshData(); }} tintColor={colors.primary} />}
         >
             {/* Top bar */}
             <View style={styles.topBar}>
                 <View>
-                    <Text style={styles.greeting}>Hey {user?.displayName?.split(' ')[0] || 'there'} 👋</Text>
+                    <Text style={styles.greeting}>Hey {displayName.split(' ')[0] || 'there'} 👋</Text>
                     <Text style={styles.subGreeting}>Ready to warm up?</Text>
                 </View>
-                <TouchableOpacity onPress={handleSignOut} style={styles.avatarBtn}>
-                    <Text style={styles.avatarText}>{(user?.displayName || user?.email || 'U')[0].toUpperCase()}</Text>
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('Account', {
+                        suggestedName: displayName !== 'there' ? displayName : undefined,
+                    })}
+                    style={styles.avatarBtn}
+                >
+                    <Text style={styles.avatarText}>{avatarInitial}</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Calendar status */}
+            <View style={styles.statusCard}>
+                <View style={styles.statusHeaderRow}>
+                    <Text style={styles.statusTitle}>Calendar</Text>
+                    <Text style={[styles.statusPill, { color: calendarLinked ? colors.success : colors.warning }]}>
+                        {calendarLinked ? 'Linked' : 'Not linked'}
+                    </Text>
+                </View>
+                <Text style={styles.statusSub}>
+                    {calendarLinked ? (calendarSource ? `Source: ${calendarSource}` : 'Calendar connected') : 'Connect your calendar to sync classes automatically'}
+                </Text>
+                {!calendarLinked && (
+                    <TouchableOpacity
+                        style={styles.statusBtn}
+                        onPress={() => navigation.navigate('CalendarConnect')}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.statusBtnText}>Connect calendar</Text>
+                    </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                    style={[styles.statusBtn, styles.statusBtnRefresh, updatingEvents && styles.statusBtnDisabled]}
+                    onPress={() => refreshData(true)}
+                    activeOpacity={0.85}
+                    disabled={updatingEvents}
+                >
+                    {updatingEvents ? (
+                        <ActivityIndicator color={colors.primary} />
+                    ) : (
+                        <Text style={styles.statusBtnText}>Update events</Text>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -165,6 +277,32 @@ const styles = StyleSheet.create({
         backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center',
     },
     avatarText: { ...typography.h4, color: '#fff' },
+    statusCard: {
+        backgroundColor: colors.surface,
+        borderRadius: radii.lg,
+        padding: spacing.md,
+        gap: spacing.xs,
+        ...shadows.sm,
+    },
+    statusHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    statusTitle: { ...typography.h4, color: colors.textPrimary },
+    statusPill: { ...typography.label, textTransform: 'uppercase' },
+    statusSub: { ...typography.caption, color: colors.textSecondary },
+    statusBtn: {
+        marginTop: spacing.sm,
+        alignSelf: 'flex-start',
+        backgroundColor: colors.primaryFaded,
+        borderRadius: radii.full,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+    },
+    statusBtnRefresh: {
+        backgroundColor: colors.background,
+        borderWidth: 1.5,
+        borderColor: colors.border,
+    },
+    statusBtnDisabled: { opacity: 0.7 },
+    statusBtnText: { ...typography.label, color: colors.primary },
     loadingBox: { height: 200, justifyContent: 'center', alignItems: 'center' },
     nextClassCard: {
         backgroundColor: colors.primary, borderRadius: radii.xl,

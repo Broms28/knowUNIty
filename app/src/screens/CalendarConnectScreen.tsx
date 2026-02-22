@@ -8,41 +8,81 @@ import { RootStackParamList } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
 import { connectIcal } from '../services/api';
 import { auth } from '../services/firebase';
-import { doc, updateDoc } from '@firebase/firestore';
+import { doc, setDoc } from '@firebase/firestore';
 import { db } from '../services/firebase';
 
 type Props = { navigation: StackNavigationProp<RootStackParamList, 'CalendarConnect'> };
+
+const normalizeIcalUrl = (rawUrl: string) => rawUrl.trim().replace(/^webcal:\/\//i, 'https://');
+
+const isLikelyIcalFeedUrl = (originalUrl: string, parsedUrl: URL) => {
+    // Accept explicit webcal links (common for Apple/iCloud shares).
+    if (originalUrl.trim().toLowerCase().startsWith('webcal://')) return true;
+
+    const href = parsedUrl.href.toLowerCase();
+    const isIcloudPublished = parsedUrl.hostname.toLowerCase().endsWith('icloud.com') &&
+        parsedUrl.pathname.toLowerCase().includes('/published/');
+
+    return href.includes('.ics') || href.includes('/ical/') || href.includes('format=ical') || isIcloudPublished;
+};
 
 export default function CalendarConnectScreen({ navigation }: Props) {
     const [icalUrl, setIcalUrl] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const goAfterCalendarAction = () => {
+        if (navigation.canGoBack()) {
+            navigation.goBack();
+            return;
+        }
+        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+    };
+
     const handleIcalConnect = async () => {
         if (!icalUrl.trim()) return Alert.alert('Missing URL', 'Please paste your iCal URL.');
-        if (!icalUrl.startsWith('http')) return Alert.alert('Invalid URL', 'URL must start with http or https.');
+
+        const normalizedUrl = normalizeIcalUrl(icalUrl);
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(normalizedUrl);
+        } catch {
+            return Alert.alert('Invalid URL', 'Please paste a valid iCal/ICS URL.');
+        }
+
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            return Alert.alert('Invalid URL', 'iCal URL must use http, https, or webcal.');
+        }
+
+        if (!isLikelyIcalFeedUrl(icalUrl, parsedUrl)) {
+            return Alert.alert('Invalid iCal Link', 'Please paste a direct iCal/ICS feed URL, not a calendar page URL.');
+        }
+
         setLoading(true);
         try {
-            await connectIcal(icalUrl.trim());
+            await connectIcal(normalizedUrl);
             // Update local user doc
             const uid = auth.currentUser?.uid;
             if (uid) {
-                await updateDoc(doc(db, 'users', uid), {
+                await setDoc(doc(db, 'users', uid), {
                     calendarType: 'ical',
-                    'calendarConfig.icalUrl': icalUrl.trim(),
-                });
+                    calendarConfig: {
+                        icalUrl: normalizedUrl,
+                    },
+                }, { merge: true });
             }
             Alert.alert('✅ Calendar connected!', 'Your iCal feed has been synced.', [
-                { text: 'Continue', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Home' }] }) },
+                { text: 'Continue', onPress: goAfterCalendarAction },
             ]);
         } catch (err: any) {
-            Alert.alert('Connection failed', err.message || 'Could not connect your calendar.');
+            const backendError = err?.response?.data?.error;
+            Alert.alert('Connection failed', backendError || err.message || 'Could not connect your calendar.');
         } finally {
             setLoading(false);
         }
     };
 
     const handleSkip = () => {
-        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        goAfterCalendarAction();
     };
 
     return (
