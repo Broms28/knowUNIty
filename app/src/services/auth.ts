@@ -17,7 +17,7 @@ const normalizeName = (value?: string | null, email?: string | null) => {
     const trimmed = String(value || '').trim();
     if (!trimmed) return '';
     if (looksLikeEmail(trimmed)) return '';
-    if (['user', 'unknown', 'n/a'].includes(trimmed.toLowerCase())) return '';
+    if (['user', 'profile', 'unknown', 'n/a', 'there'].includes(trimmed.toLowerCase())) return '';
     if (email && trimmed.toLowerCase() === email.toLowerCase()) return '';
     return trimmed;
 };
@@ -57,7 +57,7 @@ const ensureUserProfileDoc = async (user: User, fallbackName?: string) => {
         lastLoginAt: now,
     };
     const existingName = normalizeName(
-        String(snap.data()?.name || snap.data()?.fullName || snap.data()?.username || '').trim(),
+        String(snap.data()?.name || snap.data()?.fullName || snap.data()?.full_name || snap.data()?.username || '').trim(),
         user.email
     );
     const chosenName = explicitFallbackName || existingName || authName;

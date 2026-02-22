@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { auth } from './firebase';
+import { QuizReviewPayload, QuizReviewSummary } from '../types';
 
 // Base URL for Firebase Cloud Functions
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/api';
@@ -23,9 +24,12 @@ export const connectGoogle = async (code: string) => {
     return res.data;
 };
 
-export const getNextEvent = async () => {
+export const getNextEvent = async (forceSync = false) => {
     const headers = await getAuthHeader();
-    const res = await axios.get(`${BASE_URL}/events/next`, { headers });
+    const res = await axios.get(`${BASE_URL}/events/next`, {
+        headers,
+        params: forceSync ? { forceSync: '1' } : undefined,
+    });
     return res.data;
 };
 
@@ -52,5 +56,17 @@ export const askDoubt = async (quizId: string, questionIndex: number, userQuesti
         { quizId, questionIndex, userQuestion },
         { headers }
     );
+    return res.data;
+};
+
+export const getLatestQuizReview = async (): Promise<{ review: QuizReviewSummary | null }> => {
+    const headers = await getAuthHeader();
+    const res = await axios.get(`${BASE_URL}/quiz/review/latest`, { headers });
+    return res.data;
+};
+
+export const getQuizReview = async (quizId: string): Promise<QuizReviewPayload> => {
+    const headers = await getAuthHeader();
+    const res = await axios.get(`${BASE_URL}/quiz/review/${encodeURIComponent(quizId)}`, { headers });
     return res.data;
 };

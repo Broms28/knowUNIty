@@ -55,7 +55,7 @@ export default function WelcomeScreen({ navigation }: Props) {
                         <Text style={styles.logoEmoji}>🎓</Text>
                     </View>
                     <Text style={styles.logoText}>
-                        Know<Text style={styles.logoTextAccent}>UNIty</Text>
+                        Know<Text style={styles.logoTextAccent}>UNI</Text>ty
                     </Text>
                     <Text style={styles.tagline}>Micro-revision before every class</Text>
                 </View>

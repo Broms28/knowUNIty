@@ -5,13 +5,14 @@ import {
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { RootStackParamList, CalendarEvent } from '../types';
+import { RootStackParamList, CalendarEvent, QuizReviewSummary } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
-import { getNextEvent } from '../services/api';
+import { getLatestQuizReview, getNextEvent } from '../services/api';
 import { getUserProfile } from '../services/auth';
 import { registerForPushNotifications } from '../services/notifications';
 import { auth, db } from '../services/firebase';
 import { doc, setDoc } from '@firebase/firestore';
+import { updateProfile } from '@firebase/auth';
 
 type Props = { navigation: StackNavigationProp<RootStackParamList, 'Home'> };
 
@@ -34,12 +35,19 @@ function minutesUntil(iso: string) {
     return Math.round((new Date(iso).getTime() - Date.now()) / 60000);
 }
 
+function formatCompletedAt(iso?: string) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 function sanitizeDisplayName(value?: string | null, email?: string | null) {
     const trimmed = String(value || '').trim();
     if (!trimmed) return '';
     const looksLikeEmail = /\S+@\S+\.\S+/.test(trimmed);
     if (looksLikeEmail) return '';
-    if (['user', 'unknown', 'n/a'].includes(trimmed.toLowerCase())) return '';
+    if (['user', 'profile', 'unknown', 'n/a', 'there'].includes(trimmed.toLowerCase())) return '';
     if (email && trimmed.toLowerCase() === email.toLowerCase()) return '';
     return trimmed;
 }
@@ -52,11 +60,12 @@ export default function HomeScreen({ navigation }: Props) {
     const [calendarLinked, setCalendarLinked] = useState<boolean>(false);
     const [calendarSource, setCalendarSource] = useState<string | null>(null);
     const [profileName, setProfileName] = useState<string>('');
+    const [latestReview, setLatestReview] = useState<QuizReviewSummary | null>(null);
     const user = auth.currentUser;
 
-    const fetchNextEvent = async () => {
+    const fetchNextEvent = async (forceSync = false) => {
         try {
-            const data = await getNextEvent();
+            const data = await getNextEvent(forceSync);
             setNextEvent(data?.event || null);
         } catch (e) {
             // No event or error
@@ -77,21 +86,28 @@ export default function HomeScreen({ navigation }: Props) {
             }
             const profile = await getUserProfile(uid) as any;
             const nameFromProfile = String(
-                profile?.name || profile?.fullName || profile?.username || ''
+                profile?.name || profile?.fullName || profile?.full_name || profile?.username || ''
             ).trim();
             setProfileName(nameFromProfile);
             const resolvedName = sanitizeDisplayName(nameFromProfile, auth.currentUser?.email) ||
                 sanitizeDisplayName(auth.currentUser?.displayName, auth.currentUser?.email);
             const profileStoredName = sanitizeDisplayName(
-                profile?.name || profile?.fullName || profile?.username,
+                profile?.name || profile?.fullName || profile?.full_name || profile?.username,
                 auth.currentUser?.email
             );
-            if (resolvedName && !profileStoredName) {
+            if (resolvedName && profileStoredName !== resolvedName) {
                 await setDoc(doc(db, 'users', uid), {
                     name: resolvedName,
                     fullName: resolvedName,
                 }, { merge: true });
                 setProfileName(resolvedName);
+                if (auth.currentUser && auth.currentUser.displayName !== resolvedName) {
+                    try {
+                        await updateProfile(auth.currentUser, { displayName: resolvedName });
+                    } catch {
+                        // Non-blocking
+                    }
+                }
             }
             const icalUrl = profile?.calendarConfig?.icalUrl || profile?.['calendarConfig.icalUrl'];
             const linked = profile?.calendarType === 'google' ||
@@ -116,13 +132,36 @@ export default function HomeScreen({ navigation }: Props) {
         }
     };
 
+    const fetchLatestReview = async () => {
+        try {
+            const data = await getLatestQuizReview();
+            setLatestReview(data?.review || null);
+        } catch {
+            setLatestReview(null);
+        }
+    };
+
     const refreshData = async (manual = false) => {
         if (manual) setUpdatingEvents(true);
         try {
-            await Promise.all([fetchNextEvent(), fetchCalendarStatus()]);
+            await Promise.all([fetchNextEvent(manual), fetchCalendarStatus(), fetchLatestReview()]);
         } finally {
             setRefreshing(false);
             if (manual) setUpdatingEvents(false);
+        }
+    };
+
+    const persistResolvedName = async (name: string) => {
+        const clean = sanitizeDisplayName(name, auth.currentUser?.email);
+        const uid = auth.currentUser?.uid;
+        if (!clean || !uid) return;
+        await setDoc(doc(db, 'users', uid), { name: clean, fullName: clean }, { merge: true });
+        if (auth.currentUser && auth.currentUser.displayName !== clean) {
+            try {
+                await updateProfile(auth.currentUser, { displayName: clean });
+            } catch {
+                // Non-blocking
+            }
         }
     };
 
@@ -139,6 +178,11 @@ export default function HomeScreen({ navigation }: Props) {
         'there';
     const avatarInitial = displayName[0]?.toUpperCase() || 'U';
 
+    const handleOpenAccount = async () => {
+        await persistResolvedName(displayName);
+        navigation.push('Account', { suggestedName: displayName });
+    };
+
     return (
         <ScrollView
             style={styles.container}
@@ -152,9 +196,7 @@ export default function HomeScreen({ navigation }: Props) {
                     <Text style={styles.subGreeting}>Ready to warm up?</Text>
                 </View>
                 <TouchableOpacity
-                    onPress={() => navigation.navigate('Account', {
-                        suggestedName: displayName !== 'there' ? displayName : undefined,
-                    })}
+                    onPress={handleOpenAccount}
                     style={styles.avatarBtn}
                 >
                     <Text style={styles.avatarText}>{avatarInitial}</Text>
@@ -229,6 +271,24 @@ export default function HomeScreen({ navigation }: Props) {
                     <Text style={styles.noEventEmoji}>🗓️</Text>
                     <Text style={styles.noEventTitle}>No upcoming classes</Text>
                     <Text style={styles.noEventSub}>Connect your calendar or create a manual warm-up</Text>
+                </View>
+            )}
+
+            {latestReview && (
+                <View style={styles.reviewCard}>
+                    <Text style={styles.reviewTitle}>Last warm-up</Text>
+                    <Text style={styles.reviewTopic}>{latestReview.topic}</Text>
+                    <Text style={styles.reviewMeta}>
+                        Score {latestReview.score}/{latestReview.total}
+                        {latestReview.completedAt ? ` · ${formatCompletedAt(latestReview.completedAt)}` : ''}
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.reviewBtn}
+                        onPress={() => navigation.navigate('QuizReview', { quizId: latestReview.quizId })}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.reviewBtnText}>Review warm-up</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -333,6 +393,20 @@ const styles = StyleSheet.create({
     noEventEmoji: { fontSize: 48 },
     noEventTitle: { ...typography.h4, color: colors.textPrimary },
     noEventSub: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+    reviewCard: {
+        backgroundColor: colors.surface, borderRadius: radii.xl,
+        padding: spacing.lg, gap: spacing.xs, ...shadows.sm,
+    },
+    reviewTitle: { ...typography.label, color: colors.textSecondary, textTransform: 'uppercase' },
+    reviewTopic: { ...typography.h4, color: colors.textPrimary },
+    reviewMeta: { ...typography.caption, color: colors.textSecondary },
+    reviewBtn: {
+        marginTop: spacing.sm, alignSelf: 'flex-start',
+        backgroundColor: colors.primaryFaded, borderRadius: radii.full,
+        paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+        borderWidth: 1.5, borderColor: colors.primary,
+    },
+    reviewBtnText: { ...typography.label, color: colors.primary },
     sectionHeader: { marginTop: spacing.md },
     sectionTitle: { ...typography.h4, color: colors.textPrimary },
     quickCards: { flexDirection: 'row', gap: spacing.md },

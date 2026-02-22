@@ -29,6 +29,7 @@ function getScoreMessage(pct: number) {
 export default function ResultsScreen({ navigation, route }: Props) {
     const { quizId, score, total } = route.params;
     const pct = score / total;
+    const canReview = !!quizId && quizId !== 'quiz-local';
     const scaleAnim = useRef(new Animated.Value(0.5)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -52,7 +53,7 @@ export default function ResultsScreen({ navigation, route }: Props) {
                 </View>
             </Animated.View>
 
-            <Animated.View style={{ opacity: fadeAnim, gap: spacing.md }}>
+            <Animated.View style={[styles.resultsBody, { opacity: fadeAnim }]}>
                 <Text style={styles.scoreMessage}>{getScoreMessage(pct)}</Text>
 
                 {/* Stats row */}
@@ -70,21 +71,33 @@ export default function ResultsScreen({ navigation, route }: Props) {
                 </View>
 
                 {/* Actions */}
-                <TouchableOpacity
-                    style={styles.homeBtn}
-                    onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
-                    activeOpacity={0.85}
-                >
-                    <Text style={styles.homeBtnText}>Back to Home</Text>
-                </TouchableOpacity>
+                <View style={styles.actions}>
+                    {canReview && (
+                        <TouchableOpacity
+                            style={styles.reviewBtn}
+                            onPress={() => navigation.navigate('QuizReview', { quizId })}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={styles.reviewBtnText}>Review this warm-up</Text>
+                        </TouchableOpacity>
+                    )}
 
-                <TouchableOpacity
-                    style={styles.retryBtn}
-                    onPress={() => navigation.goBack()}
-                    activeOpacity={0.85}
-                >
-                    <Text style={styles.retryBtnText}>Try another topic 🔄</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.homeBtn}
+                        onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.homeBtnText}>Back to Home</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.retryBtn}
+                        onPress={() => navigation.goBack()}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.retryBtnText}>Try another topic 🔄</Text>
+                    </TouchableOpacity>
+                </View>
 
                 {/* Tip */}
                 <View style={styles.tip}>
@@ -98,6 +111,15 @@ export default function ResultsScreen({ navigation, route }: Props) {
     );
 }
 
+const actionBtnBase = {
+    width: '100%' as const,
+    minHeight: 52,
+    borderRadius: radii.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.md,
+};
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     content: {
@@ -105,6 +127,7 @@ const styles = StyleSheet.create({
         alignItems: 'center', gap: spacing.lg,
     },
     scoreCircleWrap: { marginBottom: spacing.md },
+    resultsBody: { width: '100%', maxWidth: 460, gap: spacing.md },
     scoreCircle: {
         width: 160, height: 160, borderRadius: 80,
         borderWidth: 6, backgroundColor: colors.surface,
@@ -122,14 +145,25 @@ const styles = StyleSheet.create({
     },
     statValue: { ...typography.h2, marginBottom: 2 },
     statLabel: { ...typography.caption, color: colors.textSecondary },
-    homeBtn: {
-        backgroundColor: colors.primary, borderRadius: radii.lg, width: '100%',
-        paddingVertical: spacing.md + 2, alignItems: 'center', ...shadows.md,
+    actions: { width: '100%', gap: spacing.sm },
+    reviewBtn: {
+        ...actionBtnBase,
+        backgroundColor: colors.primaryFaded,
+        borderWidth: 1.5,
+        borderColor: colors.primary,
     },
-    homeBtnText: { ...typography.h4, color: '#fff' },
+    reviewBtnText: { ...typography.bodyMedium, color: colors.primary },
+    homeBtn: {
+        ...actionBtnBase,
+        backgroundColor: colors.primary,
+        ...shadows.md,
+    },
+    homeBtnText: { ...typography.bodyMedium, color: '#fff' },
     retryBtn: {
-        paddingVertical: spacing.md, alignItems: 'center', width: '100%',
-        borderRadius: radii.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface,
+        ...actionBtnBase,
+        borderWidth: 1.5,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
     },
     retryBtnText: { ...typography.bodyMedium, color: colors.textPrimary },
     tip: {

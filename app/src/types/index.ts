@@ -49,6 +49,37 @@ export interface QuizAttempt {
     createdAt: string;
 }
 
+export interface QuizReviewSummary {
+    quizId: string;
+    topic: string;
+    mode: 'quick' | 'extended';
+    score: number;
+    total: number;
+    completedAt: string;
+    eventId?: string | null;
+}
+
+export interface QuizReviewPayload {
+    review: {
+        quiz: Quiz & {
+            completedAt?: string;
+            eventId?: string | null;
+        };
+        attempt: {
+            id: string;
+            score: number;
+            total: number;
+            answers: number[];
+            createdAt: string;
+            feedback: Array<{
+                isCorrect: boolean;
+                correctIndex: number;
+                selectedIndex: number;
+            }>;
+        } | null;
+    };
+}
+
 export interface DoubtMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -72,5 +103,6 @@ export type RootStackParamList = {
     WarmUp: { eventId?: string; eventTitle?: string };
     Quiz: { topic: string; mode: 'quick' | 'extended'; eventId?: string };
     Results: { quizId: string; score: number; total: number };
+    QuizReview: { quizId: string };
     Doubts: { quizId: string; questionIndex: number; question: string };
 };

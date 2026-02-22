@@ -58,6 +58,15 @@ export default function QuizScreen({ navigation, route }: Props) {
 
                 setQuestions(safeQuestions);
                 setQuizId(typeof data?.quiz?.id === 'string' ? data.quiz.id : null);
+                if (data?.fallbackUsed || data?.generationSource === 'fallback') {
+                    const reason = String(data?.fallbackReason || '').trim();
+                    Alert.alert(
+                        'Gemini not available',
+                        reason
+                            ? `Quiz used fallback generation: ${reason}`
+                            : 'Quiz used fallback generation because Gemini was unavailable.'
+                    );
+                }
             } catch (e: any) {
                 const backendError = e?.response?.data?.error;
                 Alert.alert('Error', backendError || e.message || 'Failed to generate quiz', [

@@ -9,6 +9,7 @@ import { colors, spacing, radii, typography, shadows } from '../constants/theme'
 import { auth, db } from '../services/firebase';
 import { getUserProfile, signOut } from '../services/auth';
 import { doc, setDoc } from '@firebase/firestore';
+import { updateProfile } from '@firebase/auth';
 
 type Props = {
     navigation: StackNavigationProp<RootStackParamList, 'Account'>;
@@ -18,6 +19,7 @@ type Props = {
 type ProfileData = {
     name?: string;
     fullName?: string;
+    full_name?: string;
     username?: string;
     email?: string;
     calendarType?: 'ical' | 'google' | null;
@@ -29,9 +31,20 @@ function sanitizeDisplayName(value?: string | null, email?: string | null) {
     if (!trimmed) return '';
     const looksLikeEmail = /\S+@\S+\.\S+/.test(trimmed);
     if (looksLikeEmail) return '';
-    if (['user', 'unknown', 'n/a'].includes(trimmed.toLowerCase())) return '';
+    if (['user', 'profile', 'unknown', 'n/a', 'there'].includes(trimmed.toLowerCase())) return '';
     if (email && trimmed.toLowerCase() === email.toLowerCase()) return '';
     return trimmed;
+}
+
+function fallbackNameFromEmail(email?: string | null) {
+    const local = String(email || '').split('@')[0]?.trim();
+    if (!local) return '';
+    const withSpaces = local.replace(/[._-]+/g, ' ').trim();
+    return withSpaces
+        .split(/\s+/)
+        .map((s) => s ? s[0].toUpperCase() + s.slice(1) : '')
+        .join(' ')
+        .trim();
 }
 
 export default function AccountScreen({ navigation, route }: Props) {
@@ -40,38 +53,54 @@ export default function AccountScreen({ navigation, route }: Props) {
     const [profile, setProfile] = useState<ProfileData | null>(null);
 
     const loadProfile = async () => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) {
+            setProfile(null);
+            setLoading(false);
+            return;
+        }
+
+        let data: ProfileData | null = null;
         try {
-            const uid = auth.currentUser?.uid;
-            if (!uid) {
-                setProfile(null);
-                return;
-            }
-            const data = await getUserProfile(uid) as ProfileData | null;
-            const currentEmail = auth.currentUser?.email || null;
-            const profileName = sanitizeDisplayName(
-                data?.name || data?.fullName || data?.username || null,
-                currentEmail
-            );
-            const suggestedName = sanitizeDisplayName(route.params?.suggestedName, currentEmail);
-            const authName = sanitizeDisplayName(auth.currentUser?.displayName, currentEmail);
-            const resolvedName = profileName || suggestedName || authName;
-            if (!profileName && resolvedName) {
+            data = await getUserProfile(uid) as ProfileData | null;
+        } catch {
+            data = null;
+        }
+
+        const currentEmail = auth.currentUser?.email || null;
+        const profileName = sanitizeDisplayName(
+            data?.name || data?.fullName || data?.full_name || data?.username || null,
+            currentEmail
+        );
+        const suggestedName = sanitizeDisplayName(route.params?.suggestedName, currentEmail);
+        const authName = sanitizeDisplayName(auth.currentUser?.displayName, currentEmail);
+        const emailFallbackName = sanitizeDisplayName(fallbackNameFromEmail(currentEmail), currentEmail);
+        const resolvedName = profileName || suggestedName || authName || emailFallbackName;
+
+        setProfile({
+            ...(data || {}),
+            ...(resolvedName ? { name: resolvedName, fullName: resolvedName } : {}),
+            ...(currentEmail ? { email: currentEmail } : {}),
+        });
+        setLoading(false);
+
+        // Keep profile/auth synced in the background, but never block rendering.
+        if (resolvedName && profileName !== resolvedName) {
+            try {
                 await setDoc(doc(db, 'users', uid), {
                     name: resolvedName,
                     fullName: resolvedName,
                 }, { merge: true });
-                setProfile({
-                    ...(data || {}),
-                    name: resolvedName,
-                    fullName: resolvedName,
-                });
-                return;
+            } catch {
+                // Non-blocking
             }
-            setProfile(data);
-        } catch {
-            setProfile(null);
-        } finally {
-            setLoading(false);
+            if (auth.currentUser && auth.currentUser.displayName !== resolvedName) {
+                try {
+                    await updateProfile(auth.currentUser, { displayName: resolvedName });
+                } catch {
+                    // Non-blocking
+                }
+            }
         }
     };
 
@@ -86,11 +115,13 @@ export default function AccountScreen({ navigation, route }: Props) {
         sanitizeDisplayName(route.params?.suggestedName, user?.email),
         sanitizeDisplayName(profile?.name, user?.email),
         sanitizeDisplayName(profile?.fullName, user?.email),
+        sanitizeDisplayName(profile?.full_name, user?.email),
         sanitizeDisplayName(profile?.username, user?.email),
         sanitizeDisplayName(user?.displayName, user?.email),
-    ].find(Boolean) || 'User';
+        sanitizeDisplayName(fallbackNameFromEmail(user?.email), user?.email),
+    ].find(Boolean) || 'Account';
     const displayEmail = user?.email || profile?.email || '';
-    const initial = displayName[0]?.toUpperCase() || 'U';
+    const initial = displayName[0]?.toUpperCase() || 'A';
     const calendarType = profile?.calendarType;
     const icalUrl = profile?.calendarConfig?.icalUrl || (profile as any)?.['calendarConfig.icalUrl'];
     const calendarLinked = calendarType === 'google' || (calendarType === 'ical' && !!icalUrl);
@@ -130,7 +161,6 @@ export default function AccountScreen({ navigation, route }: Props) {
                 <View style={styles.profileTextWrap}>
                     <Text style={styles.name}>{displayName}</Text>
                     <Text style={styles.email}>{displayEmail}</Text>
-                    {!!user?.uid && <Text style={styles.uid}>UID: {user.uid}</Text>}
                 </View>
             </View>
 
@@ -195,7 +225,6 @@ const styles = StyleSheet.create({
     profileTextWrap: { flex: 1 },
     name: { ...typography.h4, color: colors.textPrimary },
     email: { ...typography.body, color: colors.textSecondary },
-    uid: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
     card: {
         backgroundColor: colors.surface,
         borderRadius: radii.xl,
