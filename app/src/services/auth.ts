@@ -6,8 +6,8 @@ import {
     User,
     GoogleAuthProvider,
     signInWithCredential,
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+} from '@firebase/auth';
+import { doc, setDoc, getDoc, updateDoc } from '@firebase/firestore';
 import { auth, db } from './firebase';
 
 export const signUpWithEmail = async (email: string, password: string, name: string) => {

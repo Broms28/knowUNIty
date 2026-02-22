@@ -8,7 +8,7 @@ import { RootStackParamList } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
 import { connectIcal } from '../services/api';
 import { auth } from '../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from '@firebase/firestore';
 import { db } from '../services/firebase';
 
 type Props = { navigation: StackNavigationProp<RootStackParamList, 'CalendarConnect'> };

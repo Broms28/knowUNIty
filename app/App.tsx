@@ -5,8 +5,8 @@ import * as Linking from 'expo-linking';
 import RootNavigator from './src/navigation/RootNavigator';
 
 export default function App() {
-    const notificationListener = useRef<Notifications.EventSubscription>();
-    const responseListener = useRef<Notifications.EventSubscription>();
+    const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+    const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
     useEffect(() => {
         // Handle notifications received while app is foregrounded
