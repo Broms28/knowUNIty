@@ -7,7 +7,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DoubtMessage } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
-import { askDoubt } from '../services/api';
+import { askDoubt, getDoubtThread } from '../services/api';
 
 type Props = {
     navigation: StackNavigationProp<RootStackParamList, 'Doubts'>;
@@ -19,11 +19,28 @@ export default function DoubtsScreen({ navigation, route }: Props) {
     const [messages, setMessages] = useState<DoubtMessage[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [loadingThread, setLoadingThread] = useState(true);
     const listRef = useRef<FlatList>(null);
+
+    useEffect(() => {
+        (async () => {
+            setLoadingThread(true);
+            try {
+                const res = await getDoubtThread(quizId, questionIndex);
+                const thread = Array.isArray(res?.thread) ? res.thread : [];
+                setMessages(thread);
+                setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 30);
+            } catch {
+                setMessages([]);
+            } finally {
+                setLoadingThread(false);
+            }
+        })();
+    }, [quizId, questionIndex]);
 
     const sendMessage = async () => {
         const q = input.trim();
-        if (!q || loading) return;
+        if (!q || loading || loadingThread) return;
         setInput('');
 
         const userMsg: DoubtMessage = { role: 'user', content: q, timestamp: new Date().toISOString() };
@@ -70,6 +87,12 @@ export default function DoubtsScreen({ navigation, route }: Props) {
             </View>
 
             {/* Chat */}
+            {loadingThread ? (
+                <View style={styles.threadLoading}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={styles.threadLoadingText}>Loading conversation...</Text>
+                </View>
+            ) : (
             <FlatList
                 ref={listRef}
                 data={messages}
@@ -97,6 +120,7 @@ export default function DoubtsScreen({ navigation, route }: Props) {
                     </View>
                 )}
             />
+            )}
 
             {loading && (
                 <View style={styles.typingIndicator}>
@@ -119,9 +143,9 @@ export default function DoubtsScreen({ navigation, route }: Props) {
                     onSubmitEditing={sendMessage}
                 />
                 <TouchableOpacity
-                    style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+                    style={[styles.sendBtn, (!input.trim() || loading || loadingThread) && styles.sendBtnDisabled]}
                     onPress={sendMessage}
-                    disabled={!input.trim() || loading}
+                    disabled={!input.trim() || loading || loadingThread}
                     activeOpacity={0.85}
                 >
                     <Text style={styles.sendBtnText}>↑</Text>
@@ -147,6 +171,11 @@ const styles = StyleSheet.create({
     },
     qLabel: { ...typography.label, color: colors.primary, textTransform: 'uppercase' },
     qText: { ...typography.bodyMedium, color: colors.textPrimary, lineHeight: 22 },
+    threadLoading: {
+        flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+        paddingHorizontal: spacing.xl, paddingTop: spacing.md,
+    },
+    threadLoadingText: { ...typography.caption, color: colors.textSecondary },
     chatList: { padding: spacing.md, gap: spacing.md, flexGrow: 1 },
     emptyChat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: spacing.sm },
     emptyChatEmoji: { fontSize: 48 },

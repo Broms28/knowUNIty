@@ -20,11 +20,18 @@ export default function SignInScreen({ navigation, route }: Props) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
         if (!email || !password) return Alert.alert('Missing fields', 'Please enter email and password.');
         if (mode === 'signup' && !name) return Alert.alert('Missing name', 'Please enter your name.');
+        if (mode === 'signup' && !confirmPassword) {
+            return Alert.alert('Missing field', 'Please confirm your password.');
+        }
+        if (mode === 'signup' && password !== confirmPassword) {
+            return Alert.alert('Password mismatch', 'Passwords do not match. Please try again.');
+        }
         setLoading(true);
         try {
             if (mode === 'signin') {
@@ -99,6 +106,19 @@ export default function SignInScreen({ navigation, route }: Props) {
                             secureTextEntry
                         />
                     </View>
+                    {mode === 'signup' && (
+                        <View style={styles.field}>
+                            <Text style={styles.label}>Confirm Password</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="••••••••"
+                                placeholderTextColor={colors.textMuted}
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                                secureTextEntry
+                            />
+                        </View>
+                    )}
 
                     <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={loading} activeOpacity={0.85}>
                         {loading ? (
@@ -114,7 +134,13 @@ export default function SignInScreen({ navigation, route }: Props) {
                     <Text style={styles.toggleText}>
                         {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
                     </Text>
-                    <TouchableOpacity onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
+                    <TouchableOpacity onPress={() => {
+                        const nextMode = mode === 'signin' ? 'signup' : 'signin';
+                        setMode(nextMode);
+                        if (nextMode === 'signin') {
+                            setConfirmPassword('');
+                        }
+                    }}>
                         <Text style={styles.toggleLink}>{mode === 'signin' ? 'Sign up' : 'Sign in'}</Text>
                     </TouchableOpacity>
                 </View>

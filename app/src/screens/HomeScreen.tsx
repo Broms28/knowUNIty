@@ -293,8 +293,17 @@ export default function HomeScreen({ navigation }: Props) {
             )}
 
             {/* Manual warm-up */}
-            <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Quick start</Text>
+                </View>
+                <TouchableOpacity
+                    style={styles.historyBtn}
+                    onPress={() => navigation.navigate('QuizHistory')}
+                    activeOpacity={0.85}
+                >
+                    <Text style={styles.historyBtnText}>Quiz history</Text>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.quickCards}>
@@ -407,8 +416,24 @@ const styles = StyleSheet.create({
         borderWidth: 1.5, borderColor: colors.primary,
     },
     reviewBtnText: { ...typography.label, color: colors.primary },
-    sectionHeader: { marginTop: spacing.md },
+    sectionHeaderRow: {
+        marginTop: spacing.md,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    sectionHeader: {},
     sectionTitle: { ...typography.h4, color: colors.textPrimary },
+    historyBtn: {
+        backgroundColor: colors.surface,
+        borderRadius: radii.full,
+        borderWidth: 1.5,
+        borderColor: colors.border,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+    },
+    historyBtnText: { ...typography.label, color: colors.textPrimary },
     quickCards: { flexDirection: 'row', gap: spacing.md },
     quickCard: {
         flex: 1, backgroundColor: colors.surface, borderRadius: radii.xl,

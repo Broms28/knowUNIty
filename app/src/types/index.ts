@@ -59,6 +59,18 @@ export interface QuizReviewSummary {
     eventId?: string | null;
 }
 
+export interface QuizHistoryItem {
+    quizId: string;
+    topic: string;
+    mode: 'quick' | 'extended';
+    createdAt: string;
+    completedAt?: string | null;
+    eventId?: string | null;
+    score: number | null;
+    total: number;
+    generationSource: 'gemini' | 'fallback';
+}
+
 export interface QuizReviewPayload {
     review: {
         quiz: Quiz & {
@@ -104,5 +116,6 @@ export type RootStackParamList = {
     Quiz: { topic: string; mode: 'quick' | 'extended'; eventId?: string };
     Results: { quizId: string; score: number; total: number };
     QuizReview: { quizId: string };
+    QuizHistory: undefined;
     Doubts: { quizId: string; questionIndex: number; question: string };
 };
