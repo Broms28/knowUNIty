@@ -57,6 +57,7 @@ export default function QuizScreen({ navigation, route }: Props) {
                 }
 
                 setQuestions(safeQuestions);
+                setAnswers(new Array(safeQuestions.length).fill(-1));
                 setQuizId(typeof data?.quiz?.id === 'string' ? data.quiz.id : null);
                 if (data?.fallbackUsed || data?.generationSource === 'fallback') {
                     const reason = String(data?.fallbackReason || '').trim();
@@ -84,33 +85,54 @@ export default function QuizScreen({ navigation, route }: Props) {
         setRevealed(true);
     };
 
+    const withCommittedCurrentAnswer = () => {
+        const updated = [...answers];
+        if (selectedAnswer !== null) {
+            updated[currentIndex] = selectedAnswer;
+        }
+        return updated;
+    };
+
+    const animateToQuestion = (targetIndex: number, updatedAnswers: number[]) => {
+        Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
+            setCurrentIndex(targetIndex);
+            const targetAnswer = updatedAnswers[targetIndex];
+            const hasAnswer = Number.isInteger(targetAnswer) && targetAnswer >= 0;
+            setSelectedAnswer(hasAnswer ? targetAnswer : null);
+            setRevealed(hasAnswer);
+            Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+        });
+    };
+
+    const handlePrevious = () => {
+        if (currentIndex === 0) return;
+        const updatedAnswers = withCommittedCurrentAnswer();
+        setAnswers(updatedAnswers);
+        animateToQuestion(currentIndex - 1, updatedAnswers);
+    };
+
     const handleNext = async () => {
         const currentQuestion = questions[currentIndex];
         if (!currentQuestion) return;
 
-        const newAnswers = [...answers, selectedAnswer ?? -1];
-        setAnswers(newAnswers);
+        const updatedAnswers = withCommittedCurrentAnswer();
+        setAnswers(updatedAnswers);
 
-        // Animate out
-        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(async () => {
-            if (currentIndex + 1 >= questions.length) {
-                // Submit quiz
-                try {
-                    if (quizId) {
-                        await submitQuiz(quizId, newAnswers);
-                    }
-                } catch (e) { /* best effort */ }
-                const score = newAnswers.reduce((acc, answer, i) => {
-                    return acc + (questions[i] && answer === questions[i].correctIndex ? 1 : 0);
-                }, 0);
-                navigation.replace('Results', { quizId: quizId || 'quiz-local', score, total: questions.length });
-            } else {
-                setCurrentIndex(currentIndex + 1);
-                setSelectedAnswer(null);
-                setRevealed(false);
-                Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-            }
-        });
+        if (currentIndex + 1 >= questions.length) {
+            // Submit quiz
+            try {
+                if (quizId) {
+                    await submitQuiz(quizId, updatedAnswers);
+                }
+            } catch (e) { /* best effort */ }
+            const score = updatedAnswers.reduce((acc, answer, i) => {
+                return acc + (questions[i] && answer === questions[i].correctIndex ? 1 : 0);
+            }, 0);
+            navigation.replace('Results', { quizId: quizId || 'quiz-local', score, total: questions.length });
+            return;
+        }
+
+        animateToQuestion(currentIndex + 1, updatedAnswers);
     };
 
     if (loading) {
@@ -190,7 +212,7 @@ export default function QuizScreen({ navigation, route }: Props) {
                                     <View style={styles.optionLetter}>
                                         <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
                                     </View>
-                                    <Text style={textStyle} numberOfLines={3}>{option}</Text>
+                                    <Text style={textStyle}>{option}</Text>
                                     {revealed && i === q.correctIndex && <Text style={styles.checkmark}>✓</Text>}
                                     {revealed && i === selectedAnswer && i !== q.correctIndex && <Text style={styles.crossmark}>✗</Text>}
                                 </TouchableOpacity>
@@ -208,6 +230,14 @@ export default function QuizScreen({ navigation, route }: Props) {
                         </View>
                     )}
                 </Animated.View>
+
+                {currentIndex > 0 && (
+                    <View style={styles.prevRow}>
+                        <TouchableOpacity style={styles.prevBtn} onPress={handlePrevious} activeOpacity={0.85}>
+                            <Text style={styles.prevBtnText}>← Previous question</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {/* Action buttons */}
                 {revealed && (
@@ -290,6 +320,17 @@ const styles = StyleSheet.create({
     explanationWrong: { backgroundColor: colors.accentLight },
     explanationLabel: { ...typography.bodyMedium, color: colors.textPrimary },
     explanationText: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+    prevRow: { marginTop: spacing.xs },
+    prevBtn: {
+        alignSelf: 'flex-start',
+        borderRadius: radii.full,
+        borderWidth: 1.5,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+    },
+    prevBtnText: { ...typography.label, color: colors.textPrimary },
     actionRow: { flexDirection: 'row', gap: spacing.md },
     doubtBtn: {
         flex: 1, borderRadius: radii.md, paddingVertical: spacing.md,

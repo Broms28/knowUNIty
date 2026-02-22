@@ -14,6 +14,7 @@ import QuizScreen from '../screens/QuizScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import DoubtsScreen from '../screens/DoubtsScreen';
 import QuizReviewScreen from '../screens/QuizReviewScreen';
+import QuizHistoryScreen from '../screens/QuizHistoryScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -49,6 +50,7 @@ export default function RootNavigator() {
                 <Stack.Screen name="Quiz" component={QuizScreen} />
                 <Stack.Screen name="Results" component={ResultsScreen} />
                 <Stack.Screen name="QuizReview" component={QuizReviewScreen} />
+                <Stack.Screen name="QuizHistory" component={QuizHistoryScreen} />
                 <Stack.Screen name="Doubts" component={DoubtsScreen} />
             </Stack.Navigator>
         </NavigationContainer>

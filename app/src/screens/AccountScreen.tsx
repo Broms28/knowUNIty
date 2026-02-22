@@ -8,6 +8,13 @@ import { RootStackParamList } from '../types';
 import { colors, spacing, radii, typography, shadows } from '../constants/theme';
 import { auth, db } from '../services/firebase';
 import { getUserProfile, signOut } from '../services/auth';
+import { getNotificationStatus, sendTestNotification } from '../services/api';
+import {
+    getPushSupportHint,
+    isExpoGoRuntime,
+    registerForPushNotifications,
+    sendLocalTestNotification,
+} from '../services/notifications';
 import { doc, setDoc } from '@firebase/firestore';
 import { updateProfile } from '@firebase/auth';
 
@@ -24,6 +31,25 @@ type ProfileData = {
     email?: string;
     calendarType?: 'ical' | 'google' | null;
     calendarConfig?: { icalUrl?: string };
+    devicePushToken?: string | null;
+    notificationDebug?: {
+        lastTestSentAt?: string | null;
+        lastTestStatus?: string | null;
+        lastTestError?: string | null;
+    };
+};
+
+type NotificationStatusData = {
+    enabled: boolean;
+    tokenType: 'expo' | 'fcm' | null;
+    tokenMasked: string | null;
+    upcomingEventsCount: number;
+    pendingNotificationsCount: number;
+    lastTestSentAt: string | null;
+    lastTestStatus: string | null;
+    lastTestError: string | null;
+    lastTestReceiptStatus: string | null;
+    lastTestReceiptError: string | null;
 };
 
 function sanitizeDisplayName(value?: string | null, email?: string | null) {
@@ -51,6 +77,11 @@ export default function AccountScreen({ navigation, route }: Props) {
     const user = auth.currentUser;
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<ProfileData | null>(null);
+    const [notifLoading, setNotifLoading] = useState(false);
+    const [notifTesting, setNotifTesting] = useState(false);
+    const [notifStatus, setNotifStatus] = useState<NotificationStatusData | null>(null);
+    const pushHint = getPushSupportHint();
+    const expoGoRuntime = isExpoGoRuntime();
 
     const loadProfile = async () => {
         const uid = auth.currentUser?.uid;
@@ -104,10 +135,21 @@ export default function AccountScreen({ navigation, route }: Props) {
         }
     };
 
+    const loadNotificationStatus = async () => {
+        try {
+            const res = await getNotificationStatus();
+            setNotifStatus(res?.notifications || null);
+        } catch {
+            setNotifStatus(null);
+        }
+    };
+
     useFocusEffect(
         useCallback(() => {
             setLoading(true);
-            loadProfile();
+            setNotifLoading(true);
+            Promise.all([loadProfile(), loadNotificationStatus()])
+                .finally(() => setNotifLoading(false));
         }, [])
     );
 
@@ -144,6 +186,58 @@ export default function AccountScreen({ navigation, route }: Props) {
                 },
             },
         ]);
+    };
+
+    const handleEnableNotifications = async () => {
+        setNotifLoading(true);
+        try {
+            const token = await registerForPushNotifications();
+            await loadProfile();
+            await loadNotificationStatus();
+            if (token) {
+                Alert.alert('Notifications enabled', 'Device registered successfully.');
+            } else {
+                Alert.alert('Not enabled', 'Permission was not granted.');
+            }
+        } catch (err: any) {
+            const msg = err?.message || 'Failed to enable notifications';
+            if (expoGoRuntime) {
+                Alert.alert('Remote push unavailable', `${msg}\n\nUse a development build to receive server notifications.`);
+            } else {
+                Alert.alert('Error', msg);
+            }
+        } finally {
+            setNotifLoading(false);
+        }
+    };
+
+    const handleSendTestNotification = async () => {
+        setNotifTesting(true);
+        try {
+            if (expoGoRuntime) {
+                await sendLocalTestNotification();
+                Alert.alert(
+                    'Local test sent',
+                    'You are on Expo Go, so this sent a local device notification. For server notifications, run a development build.'
+                );
+                return;
+            }
+
+            const res = await sendTestNotification();
+            await loadNotificationStatus();
+            const receiptLine = res.receiptStatus ? `\nReceipt: ${res.receiptStatus}` : '';
+            const receiptErrorLine = res.receiptError ? `\nReceipt error: ${res.receiptError}` : '';
+            Alert.alert(
+                'Test sent',
+                `Notification sent via ${res.channel.toUpperCase()}${res.ticketId ? `\nTicket: ${res.ticketId}` : ''}${receiptLine}${receiptErrorLine}`
+            );
+        } catch (err: any) {
+            const backendError = err?.response?.data?.error;
+            Alert.alert('Test failed', backendError || err?.message || 'Failed to send test notification');
+            await loadNotificationStatus();
+        } finally {
+            setNotifTesting(false);
+        }
     };
 
     return (
@@ -189,6 +283,82 @@ export default function AccountScreen({ navigation, route }: Props) {
                 >
                     <Text style={styles.secondaryBtnText}>{calendarLinked ? 'Manage calendar' : 'Connect calendar'}</Text>
                 </TouchableOpacity>
+            </View>
+
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Notifications</Text>
+                {(notifLoading || loading) ? (
+                    <View style={styles.loadingRow}>
+                        <ActivityIndicator color={colors.primary} />
+                    </View>
+                ) : (
+                    <>
+                        <Text style={[styles.status, { color: notifStatus?.enabled ? colors.success : colors.warning }]}>
+                            {notifStatus?.enabled ? 'Enabled' : 'Not enabled'}
+                        </Text>
+                        <Text style={styles.detail}>
+                            Token: {notifStatus?.tokenMasked || 'None'}
+                        </Text>
+                        <Text style={styles.detail}>
+                            Upcoming classes: {notifStatus?.upcomingEventsCount ?? 0} · Pending reminders: {notifStatus?.pendingNotificationsCount ?? 0}
+                        </Text>
+                        {pushHint && (
+                            <Text style={[styles.detail, { color: colors.warning }]}>
+                                {pushHint}
+                            </Text>
+                        )}
+                        {notifStatus?.lastTestSentAt && (
+                            <Text style={styles.detail}>
+                                Last test: {notifStatus.lastTestStatus || 'unknown'} at {new Date(notifStatus.lastTestSentAt).toLocaleString()}
+                            </Text>
+                        )}
+                        {notifStatus?.lastTestReceiptStatus && (
+                            <Text style={styles.detail}>
+                                Last receipt: {notifStatus.lastTestReceiptStatus}
+                            </Text>
+                        )}
+                        {notifStatus?.lastTestReceiptError && (
+                            <Text style={[styles.detail, { color: colors.accent }]}>
+                                Receipt error: {notifStatus.lastTestReceiptError}
+                            </Text>
+                        )}
+                        {notifStatus?.lastTestError && (
+                            <Text style={[styles.detail, { color: colors.accent }]}>
+                                Last error: {notifStatus.lastTestError}
+                            </Text>
+                        )}
+                    </>
+                )}
+
+                <View style={styles.notificationActions}>
+                    <TouchableOpacity
+                        style={styles.notificationBtn}
+                        onPress={handleEnableNotifications}
+                        activeOpacity={0.85}
+                        disabled={notifLoading}
+                    >
+                        {notifLoading ? (
+                            <ActivityIndicator color={colors.primary} />
+                        ) : (
+                            <Text style={styles.secondaryBtnText}>Enable notifications</Text>
+                        )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.notificationBtn, !notifStatus?.enabled && styles.secondaryBtnDisabled]}
+                        onPress={handleSendTestNotification}
+                        activeOpacity={0.85}
+                        disabled={(!expoGoRuntime && !notifStatus?.enabled) || notifTesting}
+                    >
+                        {notifTesting ? (
+                            <ActivityIndicator color={colors.primary} />
+                        ) : (
+                            <Text style={styles.secondaryBtnText}>
+                                {expoGoRuntime ? 'Send local test notification' : 'Send test notification'}
+                            </Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.85}>
@@ -246,7 +416,18 @@ const styles = StyleSheet.create({
         borderRadius: radii.md,
         backgroundColor: colors.background,
     },
+    notificationBtn: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.md,
+        borderWidth: 1.5,
+        borderColor: colors.border,
+        borderRadius: radii.md,
+        backgroundColor: colors.background,
+    },
+    secondaryBtnDisabled: { opacity: 0.55 },
     secondaryBtnText: { ...typography.bodyMedium, color: colors.textPrimary },
+    notificationActions: { gap: spacing.xs },
     signOutBtn: {
         marginTop: spacing.sm,
         alignItems: 'center',
